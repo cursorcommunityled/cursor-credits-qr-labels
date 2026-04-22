@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QR Label Studio</title>
+    <meta
+      name="description"
+      content="Generate printable QR-code sticker sheets from a CSV of URLs and any PDF label template. Runs entirely in your browser."
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>QR Label Studio</h1>
+        <p class="tagline">
+          Turn a CSV of URLs into a printable QR-code sticker sheet that lines up
+          with your label template. Everything runs locally in your browser —
+          your files never leave your device.
+        </p>
+      </header>
+
+      <section class="card">
+        <h2>1. Upload your label template</h2>
+        <p class="muted">
+          A PDF where each sticker cell is outlined (rectangles or rounded
+          rectangles). We read the outlines to figure out the grid.
+        </p>
+        <input id="template-input" type="file" accept="application/pdf" />
+        <div id="template-result" class="result"></div>
+      </section>
+
+      <section class="card">
+        <h2>2. Upload a CSV of URLs</h2>
+        <p class="muted">One URL per line (first column). Blank lines are skipped.</p>
+        <input id="csv-input" type="file" accept=".csv,text/csv,text/plain" />
+        <div id="csv-result" class="result"></div>
+      </section>
+
+      <section class="card">
+        <h2>3. Label text</h2>
+        <p class="muted">This text appears on every sticker, to the right of the QR code.</p>
+        <input
+          id="text-input"
+          type="text"
+          maxlength="60"
+          placeholder="e.g. Cursor credits"
+          value="Cursor credits"
+        />
+      </section>
+
+      <section class="card">
+        <h2>4. Generate</h2>
+        <button id="generate-btn" disabled>Generate PDF</button>
+        <div id="progress" class="result"></div>
+        <a id="download-link" class="download" hidden>Download qr_labels.pdf</a>
+      </section>
+
+      <footer>
+        <p class="muted small">
+          Built with pdf-lib, pdfjs-dist &amp; qrcode. Page 1 of the output is
+          a print-instructions sheet; pages 2+ contain the stickers.
+        </p>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

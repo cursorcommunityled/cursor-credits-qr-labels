@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.DS_Store
+.vite/
+*.log
+.env
+.env.local
+
+# Never commit user data that might contain URLs / QR-code payloads.
+# The app is intended to run locally against files on the user's disk;
+# those files should not end up in the repo.
+*.csv
+*.pdf
+
+# Python reference artifacts
+reference/__pycache__/
+reference/output/
+.venv/
