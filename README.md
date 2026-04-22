@@ -63,10 +63,11 @@ The app is 100% static — Cloudflare Pages' free tier is a perfect fit.
 
 ### One-time setup in the Cloudflare dashboard
 
-1. Push this repo to GitHub (see below).
-2. Open <https://dash.cloudflare.com/?to=/:account/pages> → **Create a project**
+1. Open <https://dash.cloudflare.com/?to=/:account/pages> → **Create a project**
    → **Connect to Git**.
-3. Select this repository.
+2. Authorize Cloudflare to read your private GitHub repos if it isn't
+   already — CF Pages works fine with private repositories.
+3. Select `cursor_credits_qr_code_stickers`.
 4. Build configuration:
    - **Framework preset:** *Vite*
    - **Build command:** `npm run build`
@@ -77,7 +78,15 @@ The app is 100% static — Cloudflare Pages' free tier is a perfect fit.
    automatically; preview URLs are generated for every branch/PR.
 
 No API tokens, no secrets, no workflows to maintain — CF Pages' native Git
-integration handles it.
+integration handles it. The deployed site itself will be publicly reachable
+at `<project>.pages.dev` even though the source repo is private.
+
+## Security note
+
+This repo's `.gitignore` excludes `*.csv` and `*.pdf` at every depth. Keep it
+that way — the whole point of the app is that *user data stays on the user's
+machine*, so the repo itself should never contain real URL lists or filled-in
+label templates.
 
 ## License
 
