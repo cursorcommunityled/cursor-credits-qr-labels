@@ -1,71 +1,86 @@
-// Build the output PDF: page 1 = printing instructions, pages 2+ = sticker sheets.
-//
-// The input `template` comes from detectTemplate() and gives us pageWidth,
-// pageHeight, colLefts, rowTops, labelWidth and labelHeight in PDF points.
-// We paint one QR + text per label cell, paginating at labelsPerPage.
+// Browser port of reference/generate_qr_labels_small.py.
+// Build the output PDF entirely in memory: page 1 = printing instructions,
+// pages 2+ = fixed 30-up letter-size QR sticker sheets.
 
 import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 import QRCode from 'qrcode';
 
-const QR_ERROR_LEVEL = 'H';           // allows ~30% damage; robust in print
-const QR_PIXELS = 480;                // rasterized QR side, pre-embed
-const LABEL_MARGIN_PT = 3;            // inner padding inside each label cell
-const TEXT_GAP_PT = 6;                // gap between QR and text
+const [PAGE_W, PAGE_H] = PageSizes.Letter;
+
+const LABEL_W = 189.0;
+const LABEL_H = 72.0;
+const COL_LEFTS = [14.0831, 211.5875, 409.0919];
+const ROW_TOPS = [
+  756.3043, 684.3043, 612.3043, 540.3043, 468.3043,
+  396.3043, 324.3043, 252.3043, 180.3044, 108.3044,
+];
+const LABELS_PER_PAGE = COL_LEFTS.length * ROW_TOPS.length;
+
+const QR_ERROR_LEVEL = 'H';
+const QR_PIXELS = 720;
+const QR_SIZE_PT = 0.70 * 72;
+const EDGE_ROW_COUNT = 2;
+const EDGE_QR_TOP_BOTTOM_PAD_PT = 3.0;
+const DUPLICATE_QR_GAP_PT = 8.0;
+const QR_LEFT_PAD_PT = 6.0;
+const TEXT_GAP_PT = 6.0;
+const SERIAL_SIZE = 6.5;
 const TEXT_FONT = StandardFonts.HelveticaBold;
+const BODY_FONT = StandardFonts.Helvetica;
 
 /**
  * @param {object} opts
- * @param {object} opts.template        detectTemplate() output
  * @param {string[]} opts.urls          URLs, one per sticker
- * @param {string} opts.labelText       text that appears on every sticker
+ * @param {string} [opts.labelText]     text that appears on every sticker
+ * @param {string | null} [opts.logoUrl] optional SVG logo URL for QR center
  * @param {(message: string, ratio: number) => void} [opts.onProgress]
  * @returns {Promise<Uint8Array>}        bytes of the output PDF
  */
-export async function generateLabelPdf({ template, urls, labelText, onProgress }) {
+export async function generateLabelPdf({
+  urls,
+  labelText = 'Cursor credits',
+  logoUrl = '/logo.svg',
+  onProgress,
+}) {
   const pdfDoc = await PDFDocument.create();
-  pdfDoc.setTitle(`QR labels (${urls.length})`);
-  pdfDoc.setCreator('QR Label Studio');
+  pdfDoc.setTitle(`QR code labels - small (${urls.length})`);
+  pdfDoc.setCreator('Cursor Credits QR Label Generator');
 
   const font = await pdfDoc.embedFont(TEXT_FONT);
+  const bodyFont = await pdfDoc.embedFont(BODY_FONT);
+  const serialFont = bodyFont;
 
-  // ---- Page 1: Instructions ----
-  drawInstructionsPage(pdfDoc, font, {
-    urlCount: urls.length,
-    template,
-    labelText,
-  });
+  drawInstructionsPage(pdfDoc, { font, bodyFont, urlCount: urls.length });
 
-  // ---- Labels ----
-  const labelsPerPage = template.labelsPerPage;
-  const totalPages = Math.max(1, Math.ceil(urls.length / labelsPerPage));
+  const totalLabelPages = Math.max(1, Math.ceil(urls.length / LABELS_PER_PAGE));
+  const textSpace = LABEL_W - QR_LEFT_PAD_PT - QR_SIZE_PT - TEXT_GAP_PT - 2.0;
+  const textSize = fitFontSize(font, labelText, textSpace, 6.0, 11.0);
 
-  // Pre-generate the single text size that fits in every label.
-  const qrSize = computeQrSize(template);
-  const textMaxWidth =
-    template.labelWidth - LABEL_MARGIN_PT - qrSize - TEXT_GAP_PT - LABEL_MARGIN_PT;
-  const textSize = fitFontSize(font, labelText, textMaxWidth, template.labelHeight);
-
-  for (let p = 0; p < totalPages; p++) {
-    onProgress?.(`Rendering page ${p + 2} of ${totalPages + 1}…`, (p + 1) / (totalPages + 1));
-    const page = pdfDoc.addPage([template.pageWidth, template.pageHeight]);
-    const pageUrls = urls.slice(p * labelsPerPage, (p + 1) * labelsPerPage);
+  for (let p = 0; p < totalLabelPages; p++) {
+    onProgress?.(`Rendering label page ${p + 1} of ${totalLabelPages}`, (p + 1) / (totalLabelPages + 1));
+    const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+    const pageUrls = urls.slice(p * LABELS_PER_PAGE, (p + 1) * LABELS_PER_PAGE);
 
     for (let i = 0; i < pageUrls.length; i++) {
       const url = pageUrls[i];
-      const row = Math.floor(i / template.cols);
-      const col = i % template.cols;
-      const labelLeft = template.colLefts[col];
-      const labelTop = template.rowTops[row];
+      const row = Math.floor(i / COL_LEFTS.length);
+      const col = i % COL_LEFTS.length;
+      const labelLeft = COL_LEFTS[col];
+      const labelTop = ROW_TOPS[row];
 
-      const qrPng = await renderQrPng(url);
+      const qrPng = await renderQrPng(url, logoUrl);
       const qrImage = await pdfDoc.embedPng(qrPng);
 
       drawLabel(page, {
-        qrImage, qrSize,
-        labelLeft, labelTop,
-        labelWidth: template.labelWidth,
-        labelHeight: template.labelHeight,
-        font, labelText, textSize,
+        qrImage,
+        row,
+        labelLeft,
+        labelTop,
+        font,
+        serialFont,
+        labelText,
+        textSize,
+        serialNumber: p * LABELS_PER_PAGE + i + 1,
       });
     }
   }
@@ -76,17 +91,8 @@ export async function generateLabelPdf({ template, urls, labelText, onProgress }
 
 /* ------------------------- layout helpers ------------------------------- */
 
-function computeQrSize(t) {
-  // Largest square that fits the label height with inner padding, capped at
-  // half the label width so the text column gets real estate too.
-  const maxByHeight = t.labelHeight - 2 * LABEL_MARGIN_PT;
-  const maxByWidth = t.labelWidth * 0.5;
-  return Math.max(10, Math.min(maxByHeight, maxByWidth));
-}
-
-function fitFontSize(font, text, maxWidth, labelHeight, minSize = 5, maxSize = 14) {
-  const vCap = Math.min(maxSize, labelHeight * 0.6);
-  let size = vCap;
+function fitFontSize(font, text, maxWidth, minSize = 6, maxSize = 11) {
+  let size = maxSize;
   while (size > minSize && font.widthOfTextAtSize(text, size) > maxWidth) {
     size -= 0.25;
   }
@@ -94,31 +100,59 @@ function fitFontSize(font, text, maxWidth, labelHeight, minSize = 5, maxSize = 1
 }
 
 function drawLabel(page, {
-  qrImage, qrSize, labelLeft, labelTop, labelWidth, labelHeight,
-  font, labelText, textSize,
+  qrImage,
+  row,
+  labelLeft,
+  labelTop,
+  font,
+  serialFont,
+  labelText,
+  textSize,
+  serialNumber,
 }) {
-  const labelBottom = labelTop - labelHeight;
+  const labelBottom = labelTop - LABEL_H;
+  const qrX = labelLeft + QR_LEFT_PAD_PT;
+  let textX;
+  let effectiveTextSize = textSize;
 
-  // QR on the left, vertically centered.
-  const qrX = labelLeft + LABEL_MARGIN_PT;
-  const qrY = labelBottom + (labelHeight - qrSize) / 2;
-  page.drawImage(qrImage, { x: qrX, y: qrY, width: qrSize, height: qrSize });
+  if (isEdgeRow(row)) {
+    const secondQrX = qrX + QR_SIZE_PT + DUPLICATE_QR_GAP_PT;
+    const highQrY = labelTop - EDGE_QR_TOP_BOTTOM_PAD_PT - QR_SIZE_PT;
+    const lowQrY = labelBottom + EDGE_QR_TOP_BOTTOM_PAD_PT;
+    page.drawImage(qrImage, { x: qrX, y: highQrY, width: QR_SIZE_PT, height: QR_SIZE_PT });
+    page.drawImage(qrImage, { x: secondQrX, y: lowQrY, width: QR_SIZE_PT, height: QR_SIZE_PT });
+    textX = secondQrX + QR_SIZE_PT + TEXT_GAP_PT;
+    effectiveTextSize = fitFontSize(font, labelText, LABEL_W - (textX - labelLeft) - 2.0, 6.0, textSize);
+  } else {
+    const qrY = labelBottom + (LABEL_H - QR_SIZE_PT) / 2;
+    page.drawImage(qrImage, { x: qrX, y: qrY, width: QR_SIZE_PT, height: QR_SIZE_PT });
+    textX = qrX + QR_SIZE_PT + TEXT_GAP_PT;
+  }
 
-  // Text right of the QR, vertically centered.
-  const textX = qrX + qrSize + TEXT_GAP_PT;
-  const textWidth = font.widthOfTextAtSize(labelText, textSize);
-  const textSpace =
-    labelWidth - LABEL_MARGIN_PT - qrSize - TEXT_GAP_PT - LABEL_MARGIN_PT;
-  const remaining = Math.max(0, textSpace - textWidth);
-  // Left-align within the text space (tight layouts), with a small inner nudge.
-  const xOffset = Math.min(remaining / 2, 4);
-  const textHeight = font.heightAtSize(textSize, { descender: false });
-  const textY = labelBottom + (labelHeight - textHeight) / 2;
+  const textY = labelBottom + LABEL_H / 2 - effectiveTextSize * 0.32;
 
   page.drawText(labelText, {
-    x: textX + xOffset,
+    x: textX,
     y: textY,
-    size: textSize,
+    size: effectiveTextSize,
+    font,
+    color: rgb(0, 0, 0),
+  });
+
+  drawSerial(page, serialFont, serialNumber, labelLeft, labelBottom);
+}
+
+function isEdgeRow(row) {
+  return row < EDGE_ROW_COUNT || row >= ROW_TOPS.length - EDGE_ROW_COUNT;
+}
+
+function drawSerial(page, font, serialNumber, labelLeft, labelBottom) {
+  const text = `#${serialNumber}`;
+  const textW = font.widthOfTextAtSize(text, SERIAL_SIZE);
+  page.drawText(text, {
+    x: labelLeft + LABEL_W - textW - 4.0,
+    y: labelBottom + 4.0,
+    size: SERIAL_SIZE,
     font,
     color: rgb(0, 0, 0),
   });
@@ -126,87 +160,129 @@ function drawLabel(page, {
 
 /* ----------------------------- QR --------------------------------------- */
 
-async function renderQrPng(url) {
+async function renderQrPng(url, logoUrl) {
   const dataUrl = await QRCode.toDataURL(url, {
     errorCorrectionLevel: QR_ERROR_LEVEL,
-    margin: 1,
+    margin: 2,
     width: QR_PIXELS,
     color: { dark: '#000000FF', light: '#FFFFFFFF' },
   });
-  const base64 = dataUrl.split(',', 2)[1];
+
+  const withLogo = await addLogoOverlay(dataUrl, logoUrl);
+  const base64 = withLogo.split(',', 2)[1];
   const bin = atob(base64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
 }
 
+async function addLogoOverlay(qrDataUrl, logoUrl) {
+  if (!logoUrl || typeof document === 'undefined' || typeof Image === 'undefined') {
+    return qrDataUrl;
+  }
+
+  try {
+    const [qrImg, logoImg] = await Promise.all([
+      loadImage(qrDataUrl),
+      loadImage(logoUrl),
+    ]);
+    const canvas = document.createElement('canvas');
+    canvas.width = qrImg.naturalWidth || qrImg.width;
+    canvas.height = qrImg.naturalHeight || qrImg.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(qrImg, 0, 0, canvas.width, canvas.height);
+
+    const halo = Math.round(canvas.width * 0.36);
+    const haloXY = Math.round((canvas.width - halo) / 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(haloXY, haloXY, halo, halo);
+
+    const maxLogoSize = Math.round(canvas.width * 0.30);
+    const logoWidth = logoImg.naturalWidth || logoImg.width || maxLogoSize;
+    const logoHeight = logoImg.naturalHeight || logoImg.height || maxLogoSize;
+    const logoScale = Math.min(maxLogoSize / logoWidth, maxLogoSize / logoHeight);
+    const drawWidth = Math.round(logoWidth * logoScale);
+    const drawHeight = Math.round(logoHeight * logoScale);
+    const logoX = Math.round((canvas.width - drawWidth) / 2);
+    const logoY = Math.round((canvas.height - drawHeight) / 2);
+    ctx.drawImage(logoImg, logoX, logoY, drawWidth, drawHeight);
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    console.warn('Logo overlay failed; generating plain QR codes.', err);
+    return qrDataUrl;
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Could not load image: ${src}`));
+    img.src = src;
+  });
+}
+
 /* ------------------------- instructions --------------------------------- */
 
-function drawInstructionsPage(pdfDoc, font, { urlCount, template, labelText }) {
-  const [w, h] = PageSizes.Letter;
-  const page = pdfDoc.addPage([w, h]);
+function drawInstructionsPage(pdfDoc, { font, bodyFont, urlCount }) {
+  const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
 
-  const title = 'QR Label Sheet — Printing Instructions';
-  const titleSize = 22;
-  const bodySize = 12;
+  const titleSize = 24;
+  const bodySize = 13;
+  const margin = 72;
+  let y = PAGE_H - margin;
 
-  // Heading
-  page.drawText(title, {
-    x: 54,
-    y: h - 72,
+  page.drawText('QR Label Printing Instructions', {
+    x: margin,
+    y,
     size: titleSize,
     font,
-    color: rgb(0.09, 0.09, 0.22),
+    color: rgb(0, 0, 0),
   });
+  y -= 42;
 
-  // Separator rule.
-  page.drawLine({
-    start: { x: 54, y: h - 88 },
-    end:   { x: w - 54, y: h - 88 },
-    thickness: 0.75,
-    color: rgb(0.75, 0.75, 0.8),
-  });
-
-  const totalPages = 1 + Math.max(1, Math.ceil(urlCount / template.labelsPerPage));
   const lines = [
-    `This PDF contains ${urlCount} QR-code sticker${urlCount === 1 ? '' : 's'}, ` +
-      `laid out for a ${template.rows}×${template.cols} label template (` +
-      `${(template.labelWidth / 72).toFixed(2)}" × ${(template.labelHeight / 72).toFixed(2)}" per label).`,
-    `Each sticker shows a scannable QR code and the text "${labelText}".`,
-    '',
-    'Before you print',
-    '• Do a test print on plain paper first and line it up against an unused label sheet to verify alignment.',
-    '• Load the label sheet into your printer exactly as your test-print oriented the paper.',
-    '',
-    'Printer / dialog settings',
-    `• Print pages 2 through ${totalPages} only (page 1 is this instructions sheet).`,
-    '• Set page scaling to "Actual Size" or 100%. Do NOT use "Fit to Page", "Shrink to Fit" or any automatic scaling.',
-    '• Page orientation: Portrait.',
-    '• Paper size: US Letter (8.5" × 11") — matches the template.',
-    '• Two-sided printing: OFF (single-sided).',
-    '',
-    'If the stickers drift across the page',
-    '• Minor drift usually means a "fit to page" setting is still enabled — double-check the scale is 100%.',
-    '• Some printers have a non-printable margin that prevents labels near the very edge from aligning. Use the printer\'s "borderless" mode if it offers one.',
-    '',
-    'Generated by QR Label Studio — everything was produced locally in your browser.',
+    'Use US Letter paper and the matching 30-label-per-page sticker sheet.',
+    `This file contains ${urlCount} QR code label${urlCount === 1 ? '' : 's'}.`,
+    'Print single-sided only.',
+    'Set scale to 100% / Actual Size.',
+    'Do not use Fit, Shrink oversized pages, Scale to fit, or borderless printing.',
+    'Turn off automatic page rotation/centering options if your print dialog exposes them.',
+    'Print page 2 first on plain paper and hold it against a label sheet to confirm alignment.',
+    'After the test looks good, print pages 2 onward on the sticker sheets.',
+    'Feed all label sheets in the same orientation between tests and final printing.',
   ];
 
-  let y = h - 120;
-  for (const raw of lines) {
-    if (raw === '') { y -= 8; continue; }
-    const isHeader = !raw.startsWith('•') && !raw.startsWith('Generated') && !raw.startsWith('This PDF') && !raw.startsWith('Each sticker');
-    const size = isHeader ? 13 : bodySize;
-    const maxWidth = w - 108;
-    const wrapped = wrapText(raw, font, size, maxWidth);
+  for (const item of lines) {
+    page.drawText('-', { x: margin, y, size: bodySize, font: bodyFont, color: rgb(0, 0, 0) });
+    const wrapped = wrapText(item, bodyFont, bodySize, PAGE_W - margin * 2 - 18);
     for (const segment of wrapped) {
       page.drawText(segment, {
-        x: 54, y, size, font,
-        color: isHeader ? rgb(0.1, 0.1, 0.4) : rgb(0.15, 0.15, 0.18),
+        x: margin + 18,
+        y,
+        size: bodySize,
+        font: bodyFont,
+        color: rgb(0, 0, 0),
       });
-      y -= size * 1.45;
+      y -= 18;
     }
-    if (isHeader) y -= 2;
+    y -= 8;
+  }
+
+  y -= 10;
+  page.drawText('Note:', { x: margin, y, size: bodySize, font, color: rgb(0, 0, 0) });
+  y -= 20;
+  const notes = [
+    'The top two and bottom two rows intentionally include two copies of the QR code: one high and one low. This gives extra tolerance if the printer feeds the sheet slightly high or low.',
+    'Serial numbers like #1, #2, etc. are printed on each label for later audit/tracking.',
+  ];
+  for (const note of notes) {
+    const wrapped = wrapText(note, bodyFont, bodySize, PAGE_W - margin * 2);
+    for (const segment of wrapped) {
+      page.drawText(segment, { x: margin, y, size: bodySize, font: bodyFont, color: rgb(0, 0, 0) });
+      y -= 18;
+    }
+    y -= 16;
   }
 }
 

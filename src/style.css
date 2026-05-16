@@ -1,12 +1,13 @@
 :root {
   color-scheme: light dark;
-  --bg: #f6f7fb;
+  --bg: #f3f7fb;
   --bg-card: #ffffff;
-  --text: #14161a;
-  --muted: #5b6472;
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --border: #e4e6ec;
+  --text: #172033;
+  --muted: #5d6b82;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #dbeafe;
+  --border: #dce5f2;
   --success: #0f8a4a;
   --danger: #c22e2e;
   --shadow: 0 1px 2px rgba(15, 20, 30, 0.04), 0 4px 16px rgba(15, 20, 30, 0.06);
@@ -18,6 +19,7 @@
     --bg-card: #181b21;
     --text: #e8eaee;
     --muted: #9aa4b2;
+    --accent-soft: rgba(37, 99, 235, 0.18);
     --border: #272b33;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.45);
   }
@@ -25,18 +27,22 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 html, body { margin: 0; padding: 0; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, var(--accent-soft), transparent 34rem),
+    var(--bg);
   color: var(--text);
   line-height: 1.5;
 }
 
 .container {
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 40px 20px 80px;
 }
@@ -46,14 +52,15 @@ header {
 }
 
 header h1 {
-  font-size: 2rem;
+  font-size: clamp(2rem, 4vw, 3rem);
   margin: 0 0 8px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 
 .tagline {
   color: var(--muted);
-  font-size: 1.02rem;
+  font-size: 1.08rem;
   margin: 0;
 }
 
@@ -72,7 +79,6 @@ header h1 {
 }
 
 .muted { color: var(--muted); }
-.small { font-size: 0.87rem; }
 
 input[type="file"],
 input[type="text"] {
@@ -92,6 +98,39 @@ input[type="text"]:focus {
   border-color: transparent;
 }
 
+.customize summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+  list-style-position: outside;
+}
+
+.customize-fields {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.customize-fields label {
+  display: block;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 6px 0 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+.tagline a {
+  font-weight: 600;
+}
+
 button {
   appearance: none;
   background: var(--accent);
@@ -106,6 +145,7 @@ button {
 }
 
 button:hover:not(:disabled) { background: var(--accent-hover); }
+button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .result {
@@ -127,8 +167,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   font-weight: 600;
 }
 .download:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-
-footer { margin-top: 28px; }
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

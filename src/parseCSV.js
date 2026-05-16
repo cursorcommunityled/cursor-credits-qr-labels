@@ -8,7 +8,7 @@ import Papa from 'papaparse';
 
 /**
  * @param {string} text  raw file contents (UTF-8 decoded)
- * @returns {string[]}    deduped, trimmed list of URLs in file order
+ * @returns {string[]}    trimmed list of URLs in file order
  */
 export function parseUrlsFromCsv(text) {
   if (!text) return [];
@@ -23,15 +23,12 @@ export function parseUrlsFromCsv(text) {
   });
 
   const urls = [];
-  const seen = new Set();
   for (const row of parsed.data) {
     if (!Array.isArray(row)) continue;
     for (const cell of row) {
       const value = String(cell ?? '').trim();
       if (!value) continue;
       if (!looksLikeUrl(value)) continue;
-      if (seen.has(value)) break; // dedupe, don't add twice
-      seen.add(value);
       urls.push(value);
       break; // first url-looking cell per row wins
     }

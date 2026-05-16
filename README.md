@@ -1,23 +1,25 @@
-# QR Label Studio
+# Cursor Credits QR Labels
 
-A static web app that turns a CSV of URLs into a printable QR-code sticker sheet,
-aligned to **your** label template. Upload a PDF template, a CSV, and a label
-text — get back a ready-to-print PDF.
+A Cloudflare-hostable static web app that turns a one-column CSV of Cursor
+credits URLs into a ready-to-print QR label PDF.
 
-Everything runs in the browser. No server, no backend, no uploads leave your
-machine.
+Everything runs in the browser. The CSV is read from the user's device, the PDF
+is generated in memory, and neither file is uploaded to or saved by a server.
+The layout matches the 30 labels per page sheet used by
+`reference/generate_qr_labels_small.py`.
 
 ## How it works
 
-1. **Template detection** (`src/detectTemplate.js`): parses the uploaded PDF,
-   walks the drawing-operator list, tracks the CTM, and extracts every path's
-   bounding box. Clusters boxes by size, picks the dominant size (= label
-   cell), and derives the column-lefts and row-tops.
-2. **CSV parsing** (`src/parseCSV.js`): reads one URL per row; tolerates
+1. **CSV parsing** (`src/parseCSV.js`): reads one URL per row; tolerates
    headers, blanks, BOMs and full CSV grammar via PapaParse.
-3. **PDF generation** (`src/generatePDF.js`): rasterizes QR codes with
-   error-correction H, composes them with the label text using `pdf-lib`, and
-   prepends an instructions page.
+2. **PDF generation** (`src/generatePDF.js`): ports the fixed 30-up geometry
+   from `reference/generate_qr_labels_small.py`, rasterizes QR codes with
+   error-correction H, adds the center logo in the browser, duplicates QR codes
+   on the top/bottom two rows for print drift tolerance, and prepends a print
+   instructions page.
+
+The supported label sheet is this Amazon item:
+<https://www.amazon.ca/dp/B0CFZWLH5T?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1>
 
 ## Run locally
 
@@ -26,8 +28,7 @@ npm install
 npm run dev            # http://localhost:5173
 npm run build          # production build to dist/
 npm run preview        # serve the built app
-npm test               # Node end-to-end smoke test (uses reference/)
-npm run detect         # Sanity-check template detection on reference/
+npm test               # Node end-to-end smoke test using reference/input.csv
 ```
 
 ## Repository layout
@@ -35,58 +36,50 @@ npm run detect         # Sanity-check template detection on reference/
 ```
 /
 ├── index.html                  # app shell
+├── public/
+│   └── logo.svg                # logo embedded into browser-generated QR codes
 ├── src/
 │   ├── main.js                 # UI glue
-│   ├── detectTemplate.js       # ** template grid detection **
 │   ├── parseCSV.js             # CSV → URL[]
 │   ├── generatePDF.js          # QR + PDF composition
 │   └── style.css
 ├── scripts/
-│   ├── e2e.mjs                 # node-run full pipeline test
-│   └── test-detect.mjs         # detector-only sanity check
+│   └── e2e.mjs                 # node-run full pipeline test
 ├── reference/                  # original Python script kept for reference
-│   ├── generate_qr_labels.py
-│   ├── 8.5x11in-30up.pdf       # sample template
 │   ├── input.csv               # sample URL list
-│   └── logo.svg
+│   ├── logo.svg
+│   ├── generate_qr_labels.py
+│   └── generate_qr_labels_small.py
 ├── package.json
 ├── vite.config.js
+├── wrangler.jsonc              # Cloudflare Workers static asset config
 └── README.md
 ```
 
 Nothing in `reference/` is shipped to production; `dist/` and `node_modules/`
 are gitignored.
 
-## Deploying to Cloudflare Pages (free)
+## Deploying to Cloudflare Workers
 
-The app is 100% static — Cloudflare Pages' free tier is a perfect fit.
+The app is 100% static and can be served by Cloudflare Workers static assets.
 
-### One-time setup in the Cloudflare dashboard
+Manual deploy, after Cloudflare login:
 
-1. Open <https://dash.cloudflare.com/?to=/:account/pages> → **Create a project**
-   → **Connect to Git**.
-2. Authorize Cloudflare to read your private GitHub repos if it isn't
-   already — CF Pages works fine with private repositories.
-3. Select `cursor_credits_qr_code_stickers`.
-4. Build configuration:
-   - **Framework preset:** *Vite*
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Root directory:** leave blank (repo root)
-   - **Node version:** 20 (or 22)
-5. Click **Save and deploy**. You're live. Future `git push` rebuilds
-   automatically; preview URLs are generated for every branch/PR.
+```bash
+npm run deploy
+```
 
-No API tokens, no secrets, no workflows to maintain — CF Pages' native Git
-integration handles it. The deployed site itself will be publicly reachable
-at `<project>.pages.dev` even though the source repo is private.
+For automatic deploys later, connect the GitHub repo in the Cloudflare dashboard
+using Workers Builds, or add a GitHub Action that runs `npm ci`, `npm run build`,
+and `npx wrangler deploy`. The source repo can remain private while the deployed
+website is publicly reachable.
 
 ## Security note
 
 This repo's `.gitignore` excludes `*.csv` and `*.pdf` at every depth. Keep it
 that way — the whole point of the app is that *user data stays on the user's
-machine*, so the repo itself should never contain real URL lists or filled-in
-label templates.
+machine*, so the repo itself should never contain real URL lists or generated
+label PDFs.
 
 ## License
 

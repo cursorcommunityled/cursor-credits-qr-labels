@@ -6,10 +6,4 @@ export default defineConfig({
     outDir: 'dist',
     assetsInlineLimit: 0,
   },
-  worker: {
-    format: 'es',
-  },
-  optimizeDeps: {
-    exclude: ['pdfjs-dist/build/pdf.worker.mjs'],
-  },
 });

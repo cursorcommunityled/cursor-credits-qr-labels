@@ -1,27 +1,34 @@
-// UI orchestration: wires the three inputs (template PDF, CSV, label text) to
-// the detection / generation pipeline. All processing runs in the browser.
+// UI orchestration: reads a one-column CSV and generates the PDF locally.
+// No files are uploaded or written to a server.
 
-import { detectTemplate, configurePdfWorker } from './detectTemplate.js';
 import { parseUrlsFromCsv } from './parseCSV.js';
 import { generateLabelPdf } from './generatePDF.js';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
-configurePdfWorker(pdfWorkerUrl);
+const DEFAULT_LABEL_TEXT = 'Cursor credits';
+const DEFAULT_LOGO_URL = '/logo.svg';
+const MAX_LABEL_TEXT_LENGTH = 28;
+const MAX_LOGO_BYTES = 512 * 1024;
+const ALLOWED_LOGO_TYPES = new Set([
+  'image/svg+xml',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
+const ALLOWED_LOGO_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp']);
 
 const state = {
-  template: null,     // result of detectTemplate()
-  urls: null,         // string[]
-  labelText: 'Cursor credits',
+  urls: null,
   lastDownloadUrl: null,
+  logoObjectUrl: null,
 };
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  templateInput: $('template-input'),
-  templateResult: $('template-result'),
   csvInput: $('csv-input'),
+  labelTextInput: $('label-text-input'),
+  logoInput: $('logo-input'),
+  customizeResult: $('customize-result'),
   csvResult: $('csv-result'),
-  textInput: $('text-input'),
   generateBtn: $('generate-btn'),
   progress: $('progress'),
   downloadLink: $('download-link'),
@@ -33,35 +40,45 @@ function setStatus(node, message, kind = '') {
 }
 
 function refreshGenerateButton() {
-  const ready = state.template && state.urls && state.urls.length > 0 && state.labelText.trim();
-  els.generateBtn.disabled = !ready;
+  els.generateBtn.disabled = !(state.urls && state.urls.length > 0);
 }
 
-els.templateInput.addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  setStatus(els.templateResult, 'Analyzing template…');
-  try {
-    const bytes = await file.arrayBuffer();
-    const template = await detectTemplate(bytes);
-    state.template = template;
-    setStatus(
-      els.templateResult,
-      `Detected ${template.rows}×${template.cols} grid (${template.labelsPerPage} labels/page), ` +
-      `each ${(template.labelWidth / 72).toFixed(2)}" × ${(template.labelHeight / 72).toFixed(2)}".`,
-      'ok'
-    );
-  } catch (err) {
-    console.error(err);
-    state.template = null;
-    setStatus(els.templateResult, err.message ?? String(err), 'err');
+function resetGeneratedPdf() {
+  els.downloadLink.hidden = true;
+  if (state.lastDownloadUrl) {
+    URL.revokeObjectURL(state.lastDownloadUrl);
+    state.lastDownloadUrl = null;
   }
-  refreshGenerateButton();
-});
+}
+
+function revokeLogoObjectUrl() {
+  if (state.logoObjectUrl) {
+    URL.revokeObjectURL(state.logoObjectUrl);
+    state.logoObjectUrl = null;
+  }
+}
+
+function getLabelText() {
+  const text = els.labelTextInput.value.trim();
+  if (!text) {
+    throw new Error('Label text is required.');
+  }
+  if (text.length > MAX_LABEL_TEXT_LENGTH) {
+    throw new Error(`Label text must be ${MAX_LABEL_TEXT_LENGTH} characters or fewer.`);
+  }
+  return text;
+}
+
+function isAllowedLogoFile(file) {
+  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  return ALLOWED_LOGO_TYPES.has(file.type) || ALLOWED_LOGO_EXTENSIONS.has(extension);
+}
 
 els.csvInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+  resetGeneratedPdf();
+  setStatus(els.progress, '');
   setStatus(els.csvResult, 'Reading URLs…');
   try {
     const text = await file.text();
@@ -77,25 +94,48 @@ els.csvInput.addEventListener('change', async (e) => {
   refreshGenerateButton();
 });
 
-els.textInput.addEventListener('input', (e) => {
-  state.labelText = e.target.value;
-  refreshGenerateButton();
+els.labelTextInput.addEventListener('input', () => {
+  resetGeneratedPdf();
+  setStatus(els.customizeResult, '');
+});
+
+els.logoInput.addEventListener('change', (e) => {
+  resetGeneratedPdf();
+  setStatus(els.customizeResult, '');
+
+  const file = e.target.files?.[0];
+  revokeLogoObjectUrl();
+  if (!file) {
+    setStatus(els.customizeResult, 'Using the default Cursor logo.');
+    return;
+  }
+
+  if (!isAllowedLogoFile(file)) {
+    els.logoInput.value = '';
+    setStatus(els.customizeResult, 'Logo must be an SVG, PNG, JPG, or WebP image.', 'err');
+    return;
+  }
+
+  if (file.size > MAX_LOGO_BYTES) {
+    els.logoInput.value = '';
+    setStatus(els.customizeResult, 'Logo file must be 512 KB or smaller.', 'err');
+    return;
+  }
+
+  state.logoObjectUrl = URL.createObjectURL(file);
+  setStatus(els.customizeResult, `Using custom logo: ${file.name}`, 'ok');
 });
 
 els.generateBtn.addEventListener('click', async () => {
-  if (!state.template || !state.urls) return;
+  if (!state.urls) return;
   els.generateBtn.disabled = true;
-  els.downloadLink.hidden = true;
-  if (state.lastDownloadUrl) {
-    URL.revokeObjectURL(state.lastDownloadUrl);
-    state.lastDownloadUrl = null;
-  }
+  resetGeneratedPdf();
   setStatus(els.progress, 'Generating QR codes…');
   try {
     const bytes = await generateLabelPdf({
-      template: state.template,
       urls: state.urls,
-      labelText: state.labelText.trim(),
+      labelText: getLabelText(),
+      logoUrl: state.logoObjectUrl ?? DEFAULT_LOGO_URL,
       onProgress: (msg, ratio) => {
         setStatus(els.progress, `${msg} (${Math.round(ratio * 100)}%)`);
       },
@@ -106,7 +146,11 @@ els.generateBtn.addEventListener('click', async () => {
     els.downloadLink.href = url;
     els.downloadLink.download = 'qr_labels.pdf';
     els.downloadLink.hidden = false;
-    setStatus(els.progress, `Done. ${state.urls.length} label${state.urls.length === 1 ? '' : 's'} ready.`, 'ok');
+    setStatus(
+      els.progress,
+      `Done. ${state.urls.length} QR code label${state.urls.length === 1 ? '' : 's'} ready.`,
+      'ok'
+    );
   } catch (err) {
     console.error(err);
     setStatus(els.progress, err.message ?? String(err), 'err');
@@ -115,4 +159,7 @@ els.generateBtn.addEventListener('click', async () => {
   }
 });
 
+els.labelTextInput.maxLength = MAX_LABEL_TEXT_LENGTH;
+els.labelTextInput.value = DEFAULT_LABEL_TEXT;
+window.addEventListener('beforeunload', revokeLogoObjectUrl);
 refreshGenerateButton();

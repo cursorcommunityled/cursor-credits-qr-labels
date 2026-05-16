@@ -3,66 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QR Label Studio</title>
+    <title>Cursor Credits QR Labels</title>
     <meta
       name="description"
-      content="Generate printable QR-code sticker sheets from a CSV of URLs and any PDF label template. Runs entirely in your browser."
+      content="Generate print-ready QR label PDFs from a CSV of Cursor credits URLs. Runs entirely in your browser."
     />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <main class="container">
       <header>
-        <h1>QR Label Studio</h1>
+        <h1>Cursor Credits QR Labels</h1>
         <p class="tagline">
-          Turn a CSV of URLs into a printable QR-code sticker sheet that lines up
-          with your label template. Everything runs locally in your browser —
-          your files never leave your device.
+          Upload a one-column CSV of credits URLs and generate a print-ready PDF
+          for
+          <a href="https://www.amazon.ca/dp/B0CFZWLH5T?ref=ppx_yo2ov_dt_b_fed_asin_title&amp;th=1" target="_blank" rel="noreferrer">
+            matching 30-up sticker sheets
+          </a>
+          . Everything runs in your browser, so the CSV and PDF are never saved
+          to a server.
         </p>
       </header>
 
       <section class="card">
-        <h2>1. Upload your label template</h2>
+        <h2>Upload CSV</h2>
         <p class="muted">
-          A PDF where each sticker cell is outlined (rectangles or rounded
-          rectangles). We read the outlines to figure out the grid.
+          The csv file should have only one column and only one URL per row. Blank lines are skipped and only URL-looking values are used.
         </p>
-        <input id="template-input" type="file" accept="application/pdf" />
-        <div id="template-result" class="result"></div>
-      </section>
-
-      <section class="card">
-        <h2>2. Upload a CSV of URLs</h2>
-        <p class="muted">One URL per line (first column). Blank lines are skipped.</p>
         <input id="csv-input" type="file" accept=".csv,text/csv,text/plain" />
         <div id="csv-result" class="result"></div>
       </section>
 
       <section class="card">
-        <h2>3. Label text</h2>
-        <p class="muted">This text appears on every sticker, to the right of the QR code.</p>
-        <input
-          id="text-input"
-          type="text"
-          maxlength="60"
-          placeholder="e.g. Cursor credits"
-          value="Cursor credits"
-        />
+        <details class="customize">
+          <summary>Customize label text and logo</summary>
+          <div class="customize-fields">
+            <label for="label-text-input">
+              Label text
+              <input id="label-text-input" type="text" value="Cursor credits" maxlength="28" required />
+            </label>
+            <p class="hint">Maximum 28 characters. Shorter text prints larger and more reliably.</p>
+
+            <label for="logo-input">
+              Company logo
+              <input id="logo-input" type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp" />
+            </label>
+            <p class="hint">Defaults to the Cursor logo. Upload SVG, PNG, JPG, or WebP up to 512 KB.</p>
+            <div id="customize-result" class="result"></div>
+          </div>
+        </details>
       </section>
 
       <section class="card">
-        <h2>4. Generate</h2>
-        <button id="generate-btn" disabled>Generate PDF</button>
+        <h2>Generate</h2>
+        <button id="generate-btn" disabled>Generate QR Codes</button>
         <div id="progress" class="result"></div>
-        <a id="download-link" class="download" hidden>Download qr_labels.pdf</a>
+        <a id="download-link" class="download" hidden>Download QR Labels</a>
       </section>
-
-      <footer>
-        <p class="muted small">
-          Built with pdf-lib, pdfjs-dist &amp; qrcode. Page 1 of the output is
-          a print-instructions sheet; pages 2+ contain the stickers.
-        </p>
-      </footer>
     </main>
 
     <script type="module" src="/src/main.js"></script>
