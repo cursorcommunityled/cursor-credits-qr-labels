@@ -64,6 +64,12 @@ header h1 {
   margin: 0;
 }
 
+.source-link {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin: 12px 0 0;
+}
+
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -128,6 +134,10 @@ a {
 }
 
 .tagline a {
+  font-weight: 600;
+}
+
+.source-link a {
   font-weight: 600;
 }
 
