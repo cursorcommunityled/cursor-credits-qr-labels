@@ -13,7 +13,7 @@ https://www.amazon.ca/dp/B0CFZWLH5T
 1. **CSV parsing** (`src/parseCSV.js`): reads one URL per row; tolerates headers, blanks, and full CSV grammar via PapaParse.
 2. **PDF generation** (`src/generatePDF.js`): ports the fixed 30-up geometry from the Amazon item, rasterizes QR codes with error-correction H, adds the center logo in the browser, duplicates QR codes on the top/bottom two rows for print drift tolerance, and prepends a print instructions page.
 
-Each individual label looks like [QR code label.jpg](QR code label.jpg).
+Each individual label looks like [QR code label.jpg](./QR%20code%20label.jpg).
 
 ## Run locally
 
