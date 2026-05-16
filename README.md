@@ -1,25 +1,19 @@
 # Cursor Credits QR Labels
 
-A Cloudflare-hostable static web app that turns a one-column CSV of Cursor
-credits URLs into a ready-to-print QR label PDF.
+A website which turns the Cursor credits CSV file into a ready-to-print QR label PDF.
 
-Everything runs in the browser. The CSV is read from the user's device, the PDF
-is generated in memory, and neither file is uploaded to or saved by a server.
-The layout matches the 30 labels per page sheet used by
-`reference/generate_qr_labels_small.py`.
+Everything runs in the browser. The CSV is read from the user's device, the PDF is generated in memory, and neither file is saved on the server.
+
+The layout matches the 30 labels per page sheet available on Amazon.
+https://www.amazon.ca/dp/B0CFZWLH5T
+
 
 ## How it works
 
-1. **CSV parsing** (`src/parseCSV.js`): reads one URL per row; tolerates
-   headers, blanks, BOMs and full CSV grammar via PapaParse.
-2. **PDF generation** (`src/generatePDF.js`): ports the fixed 30-up geometry
-   from `reference/generate_qr_labels_small.py`, rasterizes QR codes with
-   error-correction H, adds the center logo in the browser, duplicates QR codes
-   on the top/bottom two rows for print drift tolerance, and prepends a print
-   instructions page.
+1. **CSV parsing** (`src/parseCSV.js`): reads one URL per row; tolerates headers, blanks, and full CSV grammar via PapaParse.
+2. **PDF generation** (`src/generatePDF.js`): ports the fixed 30-up geometry from the Amazon item, rasterizes QR codes with error-correction H, adds the center logo in the browser, duplicates QR codes on the top/bottom two rows for print drift tolerance, and prepends a print instructions page.
 
-The supported label sheet is this Amazon item:
-<https://www.amazon.ca/dp/B0CFZWLH5T?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1>
+Each individual label looks like [QR code label.jpg](QR code label.jpg).
 
 ## Run locally
 
@@ -56,9 +50,6 @@ npm test               # Node end-to-end smoke test using reference/input.csv
 └── README.md
 ```
 
-Nothing in `reference/` is shipped to production; `dist/` and `node_modules/`
-are gitignored.
-
 ## Deploying to Cloudflare Workers
 
 The app is 100% static and can be served by Cloudflare Workers static assets.
@@ -69,17 +60,6 @@ Manual deploy, after Cloudflare login:
 npm run deploy
 ```
 
-For automatic deploys later, connect the GitHub repo in the Cloudflare dashboard
-using Workers Builds, or add a GitHub Action that runs `npm ci`, `npm run build`,
-and `npx wrangler deploy`. The source repo can remain private while the deployed
-website is publicly reachable.
-
-## Security note
-
-This repo's `.gitignore` excludes `*.csv` and `*.pdf` at every depth. Keep it
-that way — the whole point of the app is that *user data stays on the user's
-machine*, so the repo itself should never contain real URL lists or generated
-label PDFs.
 
 ## License
 
