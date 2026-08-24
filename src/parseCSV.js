@@ -38,8 +38,10 @@ export function parseUrlsFromCsv(text) {
 
 function looksLikeUrl(s) {
   if (s.length > 2048) return false;
-  // Accept full URLs and bare hostnames with a dot.
-  if (/^(https?:\/\/|ftp:\/\/|mailto:|tel:)/i.test(s)) return true;
-  if (/^[a-z0-9][\w.-]*\.[a-z]{2,}(\/.*)?$/i.test(s)) return true;
-  return false;
+  try {
+    const parsed = new URL(s);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
